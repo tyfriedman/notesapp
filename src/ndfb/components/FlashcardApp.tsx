@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { PLAYERS, type Player } from "@/ndfb/data/roster";
 
 type Mode = "number" | "position" | "name";
+type Order = "sequential" | "shuffle";
 
 type Card =
   | { kind: "number"; number: number; players: Player[] }
@@ -58,11 +59,14 @@ function buildCards(mode: Mode): Card[] {
       }));
   }
 
-  return PLAYERS.map((player) => ({ kind: "name" as const, player }));
+  return [...PLAYERS]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((player) => ({ kind: "name" as const, player }));
 }
 
-function buildDeck(mode: Mode): Card[] {
-  return shuffle(buildCards(mode));
+function buildDeck(mode: Mode, order: Order): Card[] {
+  const cards = buildCards(mode);
+  return order === "shuffle" ? shuffle(cards) : cards;
 }
 
 function formatNumber(n: number): string {
@@ -71,41 +75,33 @@ function formatNumber(n: number): string {
 
 export function FlashcardApp() {
   const [mode, setMode] = useState<Mode>("number");
-  const [deck, setDeck] = useState<Card[]>(() => buildCards("number"));
+  const [order, setOrder] = useState<Order>("sequential");
+  const [deck, setDeck] = useState<Card[]>(() => buildDeck("number", "sequential"));
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const touchMoved = useRef(false);
 
-  useEffect(() => {
-    setDeck(buildDeck("number"));
-  }, []);
-
   const card = deck[index] ?? null;
   const progress = deck.length > 0 ? `${index + 1} / ${deck.length}` : "0 / 0";
 
-  const resetDeck = useCallback((nextMode: Mode) => {
+  const loadDeck = useCallback((nextMode: Mode, nextOrder: Order) => {
     setMode(nextMode);
-    setDeck(buildDeck(nextMode));
+    setOrder(nextOrder);
+    setDeck(buildDeck(nextMode, nextOrder));
     setIndex(0);
     setFlipped(false);
   }, []);
-
-  const handleShuffle = useCallback(() => {
-    setDeck(buildDeck(mode));
-    setIndex(0);
-    setFlipped(false);
-  }, [mode]);
 
   const handleNext = useCallback(() => {
     if (deck.length === 0) return;
     if (index >= deck.length - 1) {
-      setDeck(buildDeck(mode));
+      setDeck(buildDeck(mode, order));
       setIndex(0);
     } else {
       setIndex((i) => i + 1);
     }
     setFlipped(false);
-  }, [deck.length, index, mode]);
+  }, [deck.length, index, mode, order]);
 
   const toggleFlip = useCallback(() => {
     if (touchMoved.current) return;
@@ -121,33 +117,24 @@ export function FlashcardApp() {
 
   return (
     <div
-      className="flex h-dvh max-h-dvh w-full flex-col overflow-hidden"
+      className="flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-[var(--ndfb-bg)]"
       style={{
-        background:
-          "radial-gradient(ellipse 90% 50% at 50% 0%, #1a3a5c 0%, var(--ndfb-navy-deep) 55%)",
         paddingTop: "max(0.75rem, env(safe-area-inset-top))",
         paddingLeft: "max(1rem, env(safe-area-inset-left))",
         paddingRight: "max(1rem, env(safe-area-inset-right))",
       }}
     >
       <header className="mx-auto w-full max-w-lg shrink-0 text-center pt-1 pb-3 sm:pt-2 sm:pb-4">
-        <p
-          className="mb-0.5 text-[0.65rem] font-semibold uppercase tracking-[0.22em] sm:text-xs sm:tracking-[0.25em]"
-          style={{ color: "var(--ndfb-gold)" }}
-        >
+        <p className="mb-0.5 text-[0.65rem] font-medium uppercase tracking-[0.18em] text-[var(--ndfb-muted)] sm:text-xs">
           Notre Dame Football
         </p>
-        <h1
-          className="text-xl font-bold tracking-tight sm:text-3xl"
-          style={{ color: "var(--ndfb-cream)" }}
-        >
+        <h1 className="text-xl font-semibold tracking-tight text-[var(--ndfb-navy)] sm:text-2xl">
           Roster Flashcards
         </h1>
       </header>
 
       <div
-        className="mx-auto mb-3 flex w-full max-w-lg shrink-0 gap-1 rounded-xl p-1 sm:mb-4"
-        style={{ background: "var(--ndfb-card)", border: "1px solid var(--ndfb-border)" }}
+        className="mx-auto mb-2 flex w-full max-w-lg shrink-0 gap-1 rounded-lg border border-[var(--ndfb-border)] bg-[var(--ndfb-surface)] p-1 sm:mb-3"
         role="tablist"
         aria-label="Study mode"
       >
@@ -159,11 +146,11 @@ export function FlashcardApp() {
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => resetDeck(m.id)}
-              className="min-h-11 flex-1 rounded-lg px-2 text-sm font-semibold transition-colors sm:min-h-12 sm:px-3"
+              onClick={() => loadDeck(m.id, order)}
+              className="min-h-11 flex-1 rounded-md px-2 text-sm font-medium transition-colors sm:min-h-11 sm:px-3"
               style={{
-                background: active ? "var(--ndfb-gold)" : "transparent",
-                color: active ? "var(--ndfb-navy-deep)" : "var(--ndfb-muted)",
+                background: active ? "var(--ndfb-navy)" : "transparent",
+                color: active ? "#fff" : "var(--ndfb-muted)",
               }}
             >
               {m.label}
@@ -172,10 +159,38 @@ export function FlashcardApp() {
         })}
       </div>
 
-      <p
-        className="mx-auto mb-2 w-full max-w-lg shrink-0 text-center text-xs sm:mb-3 sm:text-sm"
-        style={{ color: "var(--ndfb-muted)" }}
+      <div
+        className="mx-auto mb-3 flex w-full max-w-lg shrink-0 gap-1 rounded-lg border border-[var(--ndfb-border)] bg-[var(--ndfb-surface)] p-1"
+        role="tablist"
+        aria-label="Card order"
       >
+        {(
+          [
+            { id: "sequential" as const, label: "In order" },
+            { id: "shuffle" as const, label: "Shuffle" },
+          ] as const
+        ).map((o) => {
+          const active = order === o.id;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => loadDeck(mode, o.id)}
+              className="min-h-10 flex-1 rounded-md px-2 text-sm font-medium transition-colors"
+              style={{
+                background: active ? "var(--ndfb-navy)" : "transparent",
+                color: active ? "#fff" : "var(--ndfb-muted)",
+              }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <p className="mx-auto mb-2 w-full max-w-lg shrink-0 text-center text-xs text-[var(--ndfb-muted)] sm:mb-3 sm:text-sm">
         {progress}
         <span className="mx-2 opacity-40">·</span>
         Tap card to {flipped ? "hide" : "reveal"}
@@ -198,23 +213,17 @@ export function FlashcardApp() {
           onTouchMove={() => {
             touchMoved.current = true;
           }}
-          className="flex min-h-0 w-full flex-1 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl px-4 py-5 text-center transition-transform active:scale-[0.99] sm:px-6 sm:py-8"
-          style={{
-            background: "var(--ndfb-card)",
-            border: "1px solid var(--ndfb-border)",
-            boxShadow: "0 16px 40px rgba(0, 0, 0, 0.35)",
-          }}
+          className="flex min-h-0 w-full flex-1 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-[var(--ndfb-border)] bg-[var(--ndfb-surface)] px-4 py-5 text-center active:bg-[#f3f2ef] sm:px-6 sm:py-8"
           aria-label={flipped ? "Hide answer" : "Reveal answer"}
         >
           {!flipped ? (
             <span
-              className="max-w-full break-words px-1 font-bold leading-tight tracking-tight"
+              className="max-w-full break-words px-1 font-semibold leading-tight tracking-tight text-[var(--ndfb-navy)]"
               style={{
-                color: "var(--ndfb-gold-bright)",
                 fontSize:
                   card?.kind === "name"
-                    ? "clamp(1.35rem, 6.5vw, 2.25rem)"
-                    : "clamp(3.25rem, 18vw, 5.5rem)",
+                    ? "clamp(1.35rem, 6.5vw, 2.1rem)"
+                    : "clamp(3rem, 16vw, 4.75rem)",
               }}
             >
               {prompt}
@@ -226,31 +235,15 @@ export function FlashcardApp() {
       </div>
 
       <div
-        className="mx-auto flex w-full max-w-lg shrink-0 gap-3"
+        className="mx-auto flex w-full max-w-lg shrink-0"
         style={{
           paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
         }}
       >
         <button
           type="button"
-          onClick={handleShuffle}
-          className="min-h-12 flex-1 rounded-xl px-4 text-base font-semibold transition-opacity active:opacity-80 sm:min-h-14"
-          style={{
-            background: "transparent",
-            border: "1px solid var(--ndfb-border)",
-            color: "var(--ndfb-cream)",
-          }}
-        >
-          Shuffle
-        </button>
-        <button
-          type="button"
           onClick={handleNext}
-          className="min-h-12 flex-[1.5] rounded-xl px-4 text-base font-semibold transition-opacity active:opacity-80 sm:min-h-14"
-          style={{
-            background: "var(--ndfb-gold)",
-            color: "var(--ndfb-navy-deep)",
-          }}
+          className="min-h-12 w-full rounded-lg bg-[var(--ndfb-navy)] px-4 text-base font-medium text-white active:opacity-90 sm:min-h-12"
         >
           Next
         </button>
@@ -266,19 +259,13 @@ function AnswerFace({ card }: { card: Card | null }) {
     const { player } = card;
     return (
       <div className="flex w-full flex-col items-center gap-2 sm:gap-3">
-        <p
-          className="max-w-full break-words text-base font-semibold sm:text-lg"
-          style={{ color: "var(--ndfb-cream)" }}
-        >
+        <p className="max-w-full break-words text-base font-medium text-[var(--ndfb-navy)] sm:text-lg">
           {player.name}
         </p>
-        <p
-          className="text-4xl font-bold tracking-tight sm:text-5xl"
-          style={{ color: "var(--ndfb-gold-bright)" }}
-        >
+        <p className="text-4xl font-semibold tracking-tight text-[var(--ndfb-navy)] sm:text-5xl">
           {formatNumber(player.number)}
         </p>
-        <p className="text-sm sm:text-base" style={{ color: "var(--ndfb-muted)" }}>
+        <p className="text-sm text-[var(--ndfb-muted)] sm:text-base">
           {player.position} · {player.year}
         </p>
       </div>
@@ -290,35 +277,22 @@ function AnswerFace({ card }: { card: Card | null }) {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-2 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] sm:gap-3">
-      <p
-        className="sticky top-0 shrink-0 pb-1 text-left text-xs font-semibold uppercase tracking-widest sm:text-sm"
-        style={{
-          color: "var(--ndfb-gold)",
-          background: "var(--ndfb-card)",
-        }}
-      >
+      <p className="sticky top-0 shrink-0 bg-[var(--ndfb-surface)] pb-1 text-left text-xs font-medium uppercase tracking-wider text-[var(--ndfb-gold)] sm:text-sm">
         {heading}
-        <span
-          className="ml-2 font-normal normal-case tracking-normal"
-          style={{ color: "var(--ndfb-muted)" }}
-        >
+        <span className="ml-2 font-normal normal-case tracking-normal text-[var(--ndfb-muted)]">
           {players.length} player{players.length === 1 ? "" : "s"}
         </span>
       </p>
-      <ul className="flex flex-col gap-1 text-left sm:gap-2">
+      <ul className="flex flex-col text-left">
         {players.map((player) => (
           <li
             key={`${player.name}-${player.number}-${player.position}`}
-            className="flex flex-col gap-0.5 border-b py-2.5 last:border-0 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3 sm:py-2"
-            style={{ borderColor: "rgba(201, 151, 0, 0.15)" }}
+            className="flex flex-col gap-0.5 border-b border-[var(--ndfb-border)] py-2.5 last:border-0 sm:flex-row sm:flex-wrap sm:items-baseline sm:justify-between sm:gap-x-3 sm:py-2"
           >
-            <span
-              className="break-words text-[0.95rem] font-semibold leading-snug sm:text-base"
-              style={{ color: "var(--ndfb-cream)" }}
-            >
+            <span className="break-words text-[0.95rem] font-medium leading-snug text-[var(--ndfb-navy)] sm:text-base">
               {player.name}
             </span>
-            <span className="text-xs sm:text-sm" style={{ color: "var(--ndfb-muted)" }}>
+            <span className="text-xs text-[var(--ndfb-muted)] sm:text-sm">
               {card.kind === "number"
                 ? `${player.position} · ${player.year}`
                 : `${formatNumber(player.number)} · ${player.year}`}
