@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { depthRank } from "@/ndfb/data/depthChart";
 import { PLAYERS, type Player } from "@/ndfb/data/roster";
 
 type Mode = "number" | "position" | "name";
@@ -55,7 +56,12 @@ function buildCards(mode: Mode): Card[] {
       .map(([position, players]) => ({
         kind: "position" as const,
         position,
-        players: [...players].sort((a, b) => a.number - b.number || a.name.localeCompare(b.name)),
+        players: [...players].sort(
+          (a, b) =>
+            depthRank(position, a.name) - depthRank(position, b.name) ||
+            a.number - b.number ||
+            a.name.localeCompare(b.name),
+        ),
       }));
   }
 
